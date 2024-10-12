@@ -1019,6 +1019,7 @@ void
 _shell_global_set_plugin (ShellGlobal *global,
                           MetaPlugin  *plugin)
 {
+  ClutterContext *clutter_context;
   MetaContext *context;
   MetaDisplay *display;
   MetaBackend *backend;
@@ -1043,6 +1044,7 @@ _shell_global_set_plugin (ShellGlobal *global,
   global->workspace_manager = meta_display_get_workspace_manager (display);
 
   global->stage = CLUTTER_STAGE (meta_get_stage_for_display (display));
+  clutter_context = clutter_actor_get_context (CLUTTER_ACTOR (global->stage));
 
   st_entry_set_cursor_func (entry_cursor_func, global);
   st_clipboard_set_selection (meta_display_get_selection (display));
@@ -1052,16 +1054,18 @@ _shell_global_set_plugin (ShellGlobal *global,
   g_signal_connect (global->stage, "notify::height",
                     G_CALLBACK (global_stage_notify_height), global);
 
-  clutter_threads_add_repaint_func_full (CLUTTER_REPAINT_FLAGS_PRE_PAINT,
-                                         global_stage_before_paint,
-                                         global, NULL);
+  clutter_context_add_repaint_func (clutter_context,
+                                    CLUTTER_REPAINT_FLAGS_PRE_PAINT,
+                                    global_stage_before_paint,
+                                    global, NULL);
 
   g_signal_connect (global->stage, "after-paint",
                     G_CALLBACK (global_stage_after_paint), global);
 
-  clutter_threads_add_repaint_func_full (CLUTTER_REPAINT_FLAGS_POST_PAINT,
-                                         global_stage_after_swap,
-                                         global, NULL);
+  clutter_context_add_repaint_func (clutter_context,
+                                    CLUTTER_REPAINT_FLAGS_POST_PAINT,
+                                    global_stage_after_swap,
+                                    global, NULL);
 
   shell_perf_log_define_event (shell_perf_log_get_default(),
                                "clutter.stagePaintStart",
