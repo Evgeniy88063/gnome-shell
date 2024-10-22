@@ -64,13 +64,13 @@ class OverviewActor extends St.BoxLayout {
         return this._controls.dash;
     }
 
-    get searchController() {
-        return this._controls.searchController;
-    }
+    // get searchController() {
+    //     return this._controls.searchController;
+    // }
 
-    get searchEntry() {
-        return this._controls.searchEntry;
-    }
+    // get searchEntry() {
+    //     return this._controls.searchEntry;
+    // }
 
     get controls() {
         return this._controls;
@@ -653,11 +653,11 @@ export class Overview extends Signals.EventEmitter {
         return this.dash.showAppsButton;
     }
 
-    get searchController() {
-        return this._overview.searchController;
-    }
+    // get searchController() {
+    //     return this._overview.searchController;
+    // }
 
-    get searchEntry() {
-        return this._overview.searchEntry;
-    }
+    // get searchEntry() {
+    //     return this._overview.searchEntry;
+    // }
 }
