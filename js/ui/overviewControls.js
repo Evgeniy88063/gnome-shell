@@ -273,7 +273,7 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
 export const OverviewAdjustment = GObject.registerClass({
     Properties: {
         'gesture-in-progress': GObject.ParamSpec.boolean(
-            'gesture-in-progress', null, null,
+            'gesture-in-progress', 'Gesture in progress', 'Gesture in progress',
             GObject.ParamFlags.READWRITE,
             false),
     },
@@ -804,7 +804,7 @@ class ControlsManager extends St.Widget {
         this._stateAdjustment.gestureInProgress = false;
     }
 
-    async runStartupAnimation() {
+    async runStartupAnimation(callback) {
         this._ignoreShowAppsButtonToggle = true;
 
         this.prepareToEnterOverview();
@@ -846,16 +846,14 @@ class ControlsManager extends St.Widget {
         });
 
         // The Dash rises from the bottom. This is the last animation to finish,
-        // so resolve the promise there.
+        // so run the callback there.
         this.dash.translation_y = this.dash.height + this.dash.margin_bottom;
-        return new Promise(resolve => {
-            this.dash.ease({
-                translation_y: 0,
-                delay: STARTUP_ANIMATION_TIME,
-                duration: STARTUP_ANIMATION_TIME,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                onStopped: () => resolve(),
-            });
+        this.dash.ease({
+            translation_y: 0,
+            delay: STARTUP_ANIMATION_TIME,
+            duration: STARTUP_ANIMATION_TIME,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => callback(),
         });
     }
 
