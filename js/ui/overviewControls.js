@@ -11,7 +11,7 @@ import * as Dash from './dash.js';
 import * as Layout from './layout.js';
 import * as Main from './main.js';
 import * as Overview from './overview.js';
-//import * as SearchController from './searchController.js';
+import * as SearchController from './searchController.js';
 import * as Util from '../misc/util.js';
 import * as WindowManager from './windowManager.js';
 import * as WorkspaceThumbnail from './workspaceThumbnail.js';
@@ -36,15 +36,16 @@ export const ControlsState = {
 
 const ControlsManagerLayout = GObject.registerClass(
 class ControlsManagerLayout extends Clutter.LayoutManager {
-    _init(appDisplay, workspacesDisplay, workspacesThumbnails, dash, stateAdjustment) {
+    _init(searchEntry, appDisplay, workspacesDisplay, workspacesThumbnails,
+        searchController, dash, stateAdjustment) {
         super._init();
 
         this._appDisplay = appDisplay;
         this._workspacesDisplay = workspacesDisplay;
         this._workspacesThumbnails = workspacesThumbnails;
         this._stateAdjustment = stateAdjustment;
-        //this._searchEntry = searchEntry;
-        //this._searchController = searchController;
+        this._searchEntry = searchEntry;
+        this._searchController = searchController;
         this._dash = dash;
 
         this._cachedWorkspaceBoxes = new Map();
@@ -159,11 +160,10 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
         let availableHeight = height;
 
         // Search entry
-        let [searchHeight] = 0
-        //let [searchHeight] = this._searchEntry.get_preferred_height(width);
-        //childBox.set_origin(0, startY);
-        //childBox.set_size(width, searchHeight);
-        //this._searchEntry.allocate(childBox);
+        let [searchHeight] = this._searchEntry.get_preferred_height(width);
+        childBox.set_origin(0, startY);
+        childBox.set_size(width, searchHeight);
+        this._searchEntry.allocate(childBox);
 
         availableHeight -= searchHeight + spacing;
 
@@ -240,7 +240,7 @@ class ControlsManagerLayout extends Clutter.LayoutManager {
         childBox.set_origin(0, startY + searchHeight + spacing);
         childBox.set_size(width, availableHeight);
 
-        // this._searchController.allocate(childBox);
+        this._searchController.allocate(childBox);
 
         this._runPostAllocation();
     }
@@ -319,21 +319,21 @@ class ControlsManager extends St.Widget {
 
         this._ignoreShowAppsButtonToggle = false;
 
-        // this._searchEntry = new St.Entry({
-        //     style_class: 'search-entry',
-        //     /* Translators: this is the text displayed
-        //        in the search entry when no search is
-        //        active; it should not exceed ~30
-        //        characters. */
-        //     hint_text: _('Type to search'),
-        //     track_hover: true,
-        //     can_focus: true,
-        // });
-        // this._searchEntry.set_offscreen_redirect(Clutter.OffscreenRedirect.ALWAYS);
-        // this._searchEntryBin = new St.Bin({
-        //     child: this._searchEntry,
-        //     x_align: Clutter.ActorAlign.CENTER,
-        // });
+        this._searchEntry = new St.Entry({
+            style_class: 'search-entry',
+            /* Translators: this is the text displayed
+               in the search entry when no search is
+               active; it should not exceed ~30
+               characters. */
+            hint_text: _('Type to search'),
+            track_hover: true,
+            can_focus: true,
+        });
+        this._searchEntry.set_offscreen_redirect(Clutter.OffscreenRedirect.ALWAYS);
+        this._searchEntryBin = new St.Bin({
+            child: this._searchEntry,
+            x_align: Clutter.ActorAlign.CENTER,
+        });
 
         this.dash = new Dash.Dash();
 
@@ -342,10 +342,10 @@ class ControlsManager extends St.Widget {
         this._stateAdjustment = new OverviewAdjustment(this);
         this._stateAdjustment.connect('notify::value', this._update.bind(this));
 
-        // this._searchController = new SearchController.SearchController(
-        //     this._searchEntry,
-        //     this.dash.showAppsButton);
-        // this._searchController.connect('notify::search-active', this._onSearchChanged.bind(this));
+        this._searchController = new SearchController.SearchController(
+            this._searchEntry,
+            this.dash.showAppsButton);
+        this._searchController.connect('notify::search-active', this._onSearchChanged.bind(this));
 
         Main.layoutManager.connect('monitors-changed', () => {
             this._thumbnailsBox.setMonitorIndex(Main.layoutManager.primaryIndex);
@@ -368,19 +368,19 @@ class ControlsManager extends St.Widget {
             this._stateAdjustment);
         this._appDisplay = new AppDisplay.AppDisplay();
 
-        // this.add_child(this._searchEntryBin);
+        this.add_child(this._searchEntryBin);
         this.add_child(this._appDisplay);
         this.add_child(this.dash);
-        // this.add_child(this._searchController);
+        this.add_child(this._searchController);
         this.add_child(this._thumbnailsBox);
         this.add_child(this._workspacesDisplay);
 
         this.layout_manager = new ControlsManagerLayout(
-            // this._searchEntryBin,
+            this._searchEntryBin,
             this._appDisplay,
             this._workspacesDisplay,
             this._thumbnailsBox,
-            // this._searchController,
+            this._searchController,
             this.dash,
             this._stateAdjustment);
 
@@ -437,8 +437,8 @@ class ControlsManager extends St.Widget {
 
         // connect_after to give search controller first dibs on the event
         global.stage.connect_after('key-press-event', (actor, event) => {
-            // if (this._searchController.searchActive)
-            //     return Clutter.EVENT_PROPAGATE;
+            if (this._searchController.searchActive)
+                return Clutter.EVENT_PROPAGATE;
 
             if (global.stage.key_focus &&
                 !this.contains(global.stage.key_focus))
@@ -546,8 +546,7 @@ class ControlsManager extends St.Widget {
 
     _updateThumbnailsBox(animate = false) {
         const {shouldShow} = this._thumbnailsBox;
-        // const {searchActive} = this._searchController;
-        const {searchActive} = true
+        const {searchActive} = this._searchController;
         const [opacity, scale, translationY] = this._getThumbnailsBoxParams();
 
         const thumbnailsBoxVisible = shouldShow && !searchActive && opacity !== 0;
@@ -584,7 +583,9 @@ class ControlsManager extends St.Widget {
         const {initialState, finalState} = stateTransitionParams;
         const state = Math.max(initialState, finalState);
 
-        this._appDisplay.visible = state > ControlsState.WINDOW_PICKER;
+        this._appDisplay.visible =
+            state > ControlsState.WINDOW_PICKER &&
+            !this._searchController.searchActive;
     }
 
     _update() {
@@ -602,41 +603,41 @@ class ControlsManager extends St.Widget {
         this._updateAppDisplayVisibility(params);
     }
 
-    // _onSearchChanged() {
-    //     const {searchActive} = this._searchController;
+    _onSearchChanged() {
+        const {searchActive} = this._searchController;
 
-    //     if (!searchActive) {
-    //         this._updateAppDisplayVisibility();
-    //         this._workspacesDisplay.reactive = true;
-    //         this._workspacesDisplay.setPrimaryWorkspaceVisible(true);
-    //     } else {
-    //         this._searchController.show();
-    //     }
+        if (!searchActive) {
+            this._updateAppDisplayVisibility();
+            this._workspacesDisplay.reactive = true;
+            this._workspacesDisplay.setPrimaryWorkspaceVisible(true);
+        } else {
+            this._searchController.show();
+        }
 
-    //     this._updateThumbnailsBox(true);
+        this._updateThumbnailsBox(true);
 
-    //     this._appDisplay.ease({
-    //         opacity: searchActive ? 0 : 255,
-    //         duration: SIDE_CONTROLS_ANIMATION_TIME,
-    //         mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-    //         onComplete: () => this._updateAppDisplayVisibility(),
-    //     });
-    //     this._workspacesDisplay.ease({
-    //         opacity: searchActive ? 0 : 255,
-    //         duration: SIDE_CONTROLS_ANIMATION_TIME,
-    //         mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-    //         onComplete: () => {
-    //             this._workspacesDisplay.reactive = !searchActive;
-    //             this._workspacesDisplay.setPrimaryWorkspaceVisible(!searchActive);
-    //         },
-    //     });
-    //     this._searchController.ease({
-    //         opacity: searchActive ? 255 : 0,
-    //         duration: SIDE_CONTROLS_ANIMATION_TIME,
-    //         mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-    //         onComplete: () => (this._searchController.visible = searchActive),
-    //     });
-    // }
+        this._appDisplay.ease({
+            opacity: searchActive ? 0 : 255,
+            duration: SIDE_CONTROLS_ANIMATION_TIME,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => this._updateAppDisplayVisibility(),
+        });
+        this._workspacesDisplay.ease({
+            opacity: searchActive ? 0 : 255,
+            duration: SIDE_CONTROLS_ANIMATION_TIME,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => {
+                this._workspacesDisplay.reactive = !searchActive;
+                this._workspacesDisplay.setPrimaryWorkspaceVisible(!searchActive);
+            },
+        });
+        this._searchController.ease({
+            opacity: searchActive ? 255 : 0,
+            duration: SIDE_CONTROLS_ANIMATION_TIME,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onComplete: () => (this._searchController.visible = searchActive),
+        });
+    }
 
     _onShowAppsButtonToggled() {
         if (this._ignoreShowAppsButtonToggle)
@@ -696,21 +697,21 @@ class ControlsManager extends St.Widget {
     }
 
     _onDestroy() {
-        //delete this._searchEntryBin;
+        delete this._searchEntryBin;
         delete this._appDisplay;
         delete this.dash;
-        //delete this._searchController;
+        delete this._searchController;
         delete this._thumbnailsBox;
         delete this._workspacesDisplay;
     }
 
     prepareToEnterOverview() {
-        //this._searchController.prepareToEnterOverview();
+        this._searchController.prepareToEnterOverview();
         this._workspacesDisplay.prepareToEnterOverview();
     }
 
     prepareToLeaveOverview() {
-        //this._searchController.prepareToLeaveOverview();
+        this._searchController.prepareToLeaveOverview();
         this._workspacesDisplay.prepareToLeaveOverview();
     }
 
@@ -825,16 +826,15 @@ class ControlsManager extends St.Widget {
 
         // Search bar falls from the ceiling
         const {primaryMonitor} = Main.layoutManager;
-        // const [, y] = this._searchEntryBin.get_transformed_position();
-        const [, y] = 0;
+        const [, y] = this._searchEntryBin.get_transformed_position();
         const yOffset = y - primaryMonitor.y;
 
-        // this._searchEntryBin.translation_y = -(yOffset + this._searchEntryBin.height);
-        // this._searchEntryBin.ease({
-        //     translation_y: 0,
-        //     duration: STARTUP_ANIMATION_TIME,
-        //     mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        // });
+        this._searchEntryBin.translation_y = -(yOffset + this._searchEntryBin.height);
+        this._searchEntryBin.ease({
+            translation_y: 0,
+            duration: STARTUP_ANIMATION_TIME,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
 
         // The Dash rises from the bottom. This is the last animation to finish,
         // so resolve the promise there.
@@ -850,13 +850,13 @@ class ControlsManager extends St.Widget {
         });
     }
 
-    // get searchController() {
-    //     return this._searchController;
-    // }
+    get searchController() {
+        return this._searchController;
+    }
 
-    // get searchEntry() {
-    //     return this._searchEntry;
-    // }
+    get searchEntry() {
+        return this._searchEntry;
+    }
 
     get appDisplay() {
         return this._appDisplay;
